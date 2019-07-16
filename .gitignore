@@ -1,0 +1,7 @@
+*.jpg
+*.mp4
+*.csv
+/data/
+/data_2/
+**/labels
+**/features*
