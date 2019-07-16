@@ -1,17 +1,17 @@
 import numpy as np
 import cv2
-from keras.models import load_model
+import torch
 
-model = load_model('Autopilot.h5')
+cnn = torch.load('Autopilot_V1.pk1')
 
-def keras_predict(model, image):
-    processed = keras_process_image(image)
-    steering_angle = float(model.predict(processed, batch_size=1))
+def cnn_predict(cnn, image):
+    processed = pre_process_image(image)
+    steering_angle = float(cnn(image))
     steering_angle = steering_angle * 100
     return steering_angle
 
 
-def keras_process_image(img):
+def pre_process_image(img):
     image_x = 40
     image_y = 40
     img = cv2.resize(img, (image_x, image_y))
@@ -28,7 +28,7 @@ cap = cv2.VideoCapture('../run.mp4')
 while (cap.isOpened()):
     ret, frame = cap.read()
     gray = cv2.resize((cv2.cvtColor(frame, cv2.COLOR_RGB2HSV))[:, :, 1], (40, 40))
-    steering_angle = keras_predict(model, gray)
+    steering_angle = cnn_predict(cnn, gray)
     print(steering_angle)
     cv2.imshow('frame', cv2.resize(frame, (500, 300), interpolation=cv2.INTER_AREA))
     smoothed_angle += 0.2 * pow(abs((steering_angle - smoothed_angle)), 2.0 / 3.0) * (

@@ -1,47 +1,79 @@
 import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.utils import shuffle
-from keras.layers import Input, Dense, Activation, Flatten, Conv2D, Lambda
-from keras.layers import MaxPooling2D, Dropout
-from keras.utils import print_summary
-import tensorflow as tf
-from keras.models import Sequential
-from keras.callbacks import ModelCheckpoint
+import torch
+import torch.nn as nn
+import torch.optim
+import torch.utils.data as tud
 import pickle
-from keras.optimizers import Adam
 
+BATCH_SIZE = 32
 
-def keras_model():
-    model = Sequential()
-    model.add(Lambda(lambda x: x / 127.5 - 1., input_shape=(40, 40, 1)))
+class AutoPilotCNN(): 
+    def __init__(self):
+        super(AutoPilotCNN, self).__init__()
+        self.conv1= nn.Sequential(
+            nn.Conv2d(1, 32, 3, 1, 1),
+            nn.ReLU(),
+            nn.MaxPool2d(2)
+        )
+        self.conv2= nn.Sequential(
+            nn.Conv2d(32, 64, 3, 1, 1),
+            nn.ReLU(),
+            nn.MaxPool2d(2)
+        )
+        self.conv3= nn.Sequential(
+            nn.Conv2d(64, 128, 3, 1, 1),
+            nn.ReLU(),
+            nn.MaxPool2d(2)
+        )
+        self.fluc1 = nn.Sequential(
+            nn.Dropout(0.5),
+            nn.Linear(128*5*5, 128)
+        )
+        self.fluc2 = nn.Sequential(
+            nn.Dropout(0.5),
+            nn.Linear(128, 64)
+        )
+        self.fluc3 = nn.Linear(64,1)
+    def forward(self,x): #x is the input
+        x = torch.div(x,127.5)
+        x = torch.add(x, -1.0)
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        x = x.view(x.size()[0],-1)
+        out = self.fluc1(x)
+        out = self.fluc2(out)
+        out = self.fluc3(out)
+        return out,x #out is the output of entire NN, and x is the one for CNN layers
 
-    model.add(Conv2D(32, (3, 3), padding='same'))
-    model.add(Activation('relu'))
-    model.add(MaxPooling2D((2, 2), padding='valid'))
+def train(model, x_list, y_list):
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
+    loss_func = nn.MSELoss()
+    #for batch
+    datasheet = tud.TensorDataset(x_list, y_list)
+    loader = tud.DataLoader(
+        dataset = datasheet,
+        batch_size = BATCH_SIZE,
+        shuffle = True,
+        num_workers = 2
+    )
+    for step, (batch_x, batch_y) in enumerate(loader): 
+        if(step%50==0):
+            out = model(batch_x)[0]
+            test(out,batch_y)
+        else:
+            out = model(batch_x)[0]
+            loss = loss_func(out,batch_y)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
-    model.add(Conv2D(64, (3, 3), padding='same'))
-    model.add(Activation('relu'))
-    model.add(MaxPooling2D((2, 2), padding='valid'))
-
-    model.add(Conv2D(128, (3, 3), padding='same'))
-    model.add(Activation('relu'))
-    model.add(MaxPooling2D((2, 2), padding='valid'))
-
-    model.add(Flatten())
-    model.add(Dropout(0.5))
-
-    model.add(Dense(128))
-
-    model.add(Dense(64))
-    model.add(Dense(1))
-
-    model.compile(optimizer=Adam(lr=0.0001), loss="mse")
-    filepath = "Autopilot.h5"
-    checkpoint1 = ModelCheckpoint(filepath, verbose=1, save_best_only=True)
-    callbacks_list = [checkpoint1]
-
-    return model, callbacks_list
-
+def test(out, batch_y):
+    accuarcy = 0
+    for i in range(len(out)):
+        accuarcy += 1 if abs(out[i]-batch_y[i])<1 else 0
+        # out[i] is an 1D tensor => 1D tensor - 1D tenso is allowed? 
+    print(i/len(out))
 
 def loadFromPickle():
     with open("features_40", "rb") as f:
@@ -50,7 +82,6 @@ def loadFromPickle():
         labels = np.array(pickle.load(f))
 
     return features, labels
-
 
 def augmentData(features, labels):
     features = np.append(features, features[:, :, ::-1], axis=0)
@@ -61,16 +92,16 @@ def augmentData(features, labels):
 def main():
     features, labels = loadFromPickle()
     features, labels = augmentData(features, labels)
-    features, labels = shuffle(features, labels)
-    train_x, test_x, train_y, test_y = train_test_split(features, labels, random_state=0,
-                                                        test_size=0.1)
-    train_x = train_x.reshape(train_x.shape[0], 40, 40, 1)
-    test_x = test_x.reshape(test_x.shape[0], 40, 40, 1)
-    model, callbacks_list = keras_model()
-    model.fit(train_x, train_y, validation_data=(test_x, test_y), epochs=5, batch_size=64,
-              callbacks=callbacks_list)
-    print_summary(model)
-    model.save('Autopilot.h5')
+    features = features.reshape(features.shape[0], 40, 40, 1)
 
+    features_tensor = torch.tensor(features, dtype=torch.float32)
+    labels_tensor = torch.tensor(labels, dtype=torch.float32)
 
-main()
+    cnn = AutoPilotCNN()
+
+    train(cnn, features_tensor, labels_tensor)
+
+    torch.save(cnn, "Autopilot_V1.pk1")
+
+if __name__ == "__main__": 
+    main()

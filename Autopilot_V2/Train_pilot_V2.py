@@ -1,53 +1,93 @@
 import numpy as np
-from keras.layers import Dense, Activation, Flatten, Conv2D, Lambda
-from keras.layers import MaxPooling2D, Dropout
-from keras.utils import print_summary
-from keras.models import Sequential
-from keras.callbacks import ModelCheckpoint
-import keras.backend as K
+import torch
+import torch.nn as nn
+import torch.optim
+import torch.utils.data as tud
 import pickle
 
-from sklearn.model_selection import train_test_split
-from sklearn.utils import shuffle
+BATCH_SIZE = 32
 
+class AutoPilotCNN():
+    def __init__(self):
+        super(AutoPilotCNN, self).__init__()
+        self.lambdaLayer = nn.Lamb
+        self.conv1 = nn.Sequential(
+             nn.Conv2d(1,32,3,1,1),
+             nn.ReLU(),
+             nn.MaxPool2d(2)
+         ) # Shape=(BATCH, 50, 50, 32)
+        self.conv2 = nn.Sequential(
+             nn.Conv2d(32,32,3,1,1),
+             nn.ReLU(),
+             nn.MaxPool2d(2)
+         )# Shape=(BATCH, 25, 25, 32)
+        self.conv3 = nn.Sequential(
+            nn.Conv2d(32, 64, 3, 1, 1),
+            nn.ReLU(),
+            nn.MaxPool2d(2)
+        )# Shape=(BATCH, 12, 12, 64)
+        self.conv4 = nn.Sequential(
+            nn.Conv2d(64,64, 3, 1, 1),
+            nn.ReLU(),
+            nn.MaxPool2d(2)
+        )# Shape=(BATCH, 6, 6, 64)
+        self.conv5 = nn.Sequential(
+            nn.Conv2d(64,128,3,1,1),
+            nn.ReLU(),
+            nn.MaxPool2d(2)
+        )# Shape=(BATCH, 3, 3, 128)
+        self.conv6 = nn.Sequential(
+            nn.Conv2d(128,128,3,1,1),
+            nn.ReLU(),
+            nn.MaxPool2d(2)
+        )# Shape=(BATCH, 1, 1, 128)
+        self.fc = nn.Sequential(
+            nn.Dropout(0.5),
+            nn.Linear(1*1*128, 1024),
+            nn.Linear(1024, 256),
+            nn.Linear(256,64),
+            nn.Linear(64,1)
+        )# Shape = (BATCH,1)
+        self.optimizer = torch.optim.Adam(self.parameters(),lr=0.0001)
+        self.loss_func = nn.MSELoss()
+    def forward(self, x):
+        x = torch.div(x,127.5)
+        x = torch.add(x, -1.0)
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        x = self.conv4(x)
+        x = self.conv5(x)
+        x = self.conv6(x)
+        x = x.view(x.size()[0],-1)
+        out = self.fc(out)
+        return out, x
+    
+    def train(self, x_list, y_list):
+        datasheet = tud.TensorDataset(x_list, y_list)
+        loader = tud.DataLoader(
+            dataset=datasheet,
+            batch_size = BATCH_SIZE,
+            shuffle = True,
+            num_workers = 2
+        )
+        for step, (batch_x, batch_y) in enumerate(loader):
+            if(step%50==0):
+                out = self(batch_x)[0]
+                test(out,batch_y)
+            else:
+                out = self(batch_x)[0]
+                loss = self.loss_func(out,batch_y)
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
 
-def keras_model(image_x, image_y):
-    model = Sequential()
-    model.add(Lambda(lambda x: x / 127.5 - 1., input_shape=(image_x, image_y, 1)))
-    model.add(Conv2D(32, (3, 3), padding='same'))
-    model.add(Activation('relu'))
-    model.add(MaxPooling2D((2, 2), padding='valid'))
-    model.add(Conv2D(32, (3, 3), padding='same'))
-    model.add(Activation('relu'))
-    model.add(MaxPooling2D((2, 2), padding='valid'))
-
-    model.add(Conv2D(64, (3, 3), padding='same'))
-    model.add(Activation('relu'))
-    model.add(MaxPooling2D((2, 2), padding='valid'))
-    model.add(Conv2D(64, (3, 3), padding='same'))
-    model.add(Activation('relu'))
-    model.add(MaxPooling2D((2, 2), padding='valid'))
-
-    model.add(Conv2D(128, (3, 3), padding='same'))
-    model.add(Activation('relu'))
-    model.add(MaxPooling2D((2, 2), padding='valid'))
-    model.add(Conv2D(128, (3, 3), padding='same'))
-    model.add(Activation('relu'))
-    model.add(MaxPooling2D((2, 2), padding='valid'))
-
-    model.add(Flatten())
-    model.add(Dropout(0.5))
-    model.add(Dense(1024))
-    model.add(Dense(256))
-    model.add(Dense(64))
-    model.add(Dense(1))
-
-    model.compile(optimizer='adam', loss="mse")
-    filepath = "Autopilot_V2.h5"
-    checkpoint = ModelCheckpoint(filepath, verbose=1, save_best_only=True)
-    callbacks_list = [checkpoint]
-
-    return model, callbacks_list
+def test(out, batch_y):
+    accuarcy = 0
+    for i in range(len(out)):
+        accuarcy += 1 if abs(out[i]-batch_y[i])<1 else 0
+        # out[i] is an 1D tensor => 1D tensor - 1D tenso is allowed? 
+    print(i/len(out))
 
 
 def loadFromPickle():
@@ -61,18 +101,16 @@ def loadFromPickle():
 
 def main():
     features, labels = loadFromPickle()
-    features, labels = shuffle(features, labels)
-    train_x, test_x, train_y, test_y = train_test_split(features, labels, random_state=0,
-                                                        test_size=0.3)
-    train_x = train_x.reshape(train_x.shape[0], 100, 100, 1)
-    test_x = test_x.reshape(test_x.shape[0], 100, 100, 1)
-    model, callbacks_list = keras_model(100, 100)
-    model.fit(train_x, train_y, validation_data=(test_x, test_y), epochs=3, batch_size=32,
-              callbacks=callbacks_list)
-    print_summary(model)
+    features = features.reshape(features.shape[0], 100, 100, 1)
+    
+    features_tensor = torch.tensor(features, dtype=torch.float32)
+    labels_tensor = torch.tensor(labels, dtype=torch.float32)
 
-    model.save('Autopilot_V2.h5')
+    cnn = AutoPilotCNN()
 
+    cnn.train(features_tensor,labels_tensor)
 
-main()
-K.clear_session();
+    torch.save(cnn,'Autopilot_V2.pk1')
+
+if __name__ == '__main__':
+    main()

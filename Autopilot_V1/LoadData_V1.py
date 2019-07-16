@@ -4,8 +4,8 @@ import csv
 import pickle
 import matplotlib.pyplot as plt
 
-features_directory = './data/'
-labels_file = './data/driving_log.csv'
+features_directory = '../data/'
+labels_file = '../data/driving_log.csv'
 
 
 def preprocess(img):

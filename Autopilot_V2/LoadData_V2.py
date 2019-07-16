@@ -2,14 +2,14 @@ from __future__ import division
 import cv2
 import os
 import numpy as np
-import scipy
 import pickle
 import matplotlib.pyplot as plt
 from itertools import islice
 
 LIMIT = None
+PI = 3.141592654
 
-DATA_FOLDER = 'driving_dataset'
+DATA_FOLDER = '../data_2'
 TRAIN_FILE = os.path.join(DATA_FOLDER, 'data.txt')
 
 def preprocess(img):
@@ -24,11 +24,12 @@ def return_data():
 
     with open(TRAIN_FILE) as fp:
         for line in islice(fp, LIMIT):
-            path, angle = line.strip().split()
+            line_lst = line.strip().split()
+            path, angle = line_lst[0], line_lst[1].split(',')[0]
             full_path = os.path.join(DATA_FOLDER, path)
             X.append(full_path)
             # using angles from -pi to pi to avoid rescaling the atan in the network
-            y.append(float(angle) * scipy.pi / 180)
+            y.append(float(angle) * PI / 180)
 
     for i in range(len(X)):
         img = plt.imread(X[i])
