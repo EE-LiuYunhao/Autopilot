@@ -1,12 +1,13 @@
 import numpy as np
 import cv2
 import torch
+from Train_pilot_V2 import AutoPilotCNN
 
 cnn = torch.load('Autopilot_V2.pk1')
 
 def cnn_predict(cnn, image):
     processed = pre_process_image(image)
-    steering_angle = float(cnn(image))
+    steering_angle = float(cnn(processed)[0].item())
     steering_angle = steering_angle * 60
     return steering_angle
 
@@ -17,6 +18,7 @@ def pre_process_image(img):
     img = cv2.resize(img, (image_x, image_y))
     img = np.array(img, dtype=np.float32)
     img = np.reshape(img, (-1, image_x, image_y, 1))
+    img = torch.tensor(img, dtype=torch.float32).permute(0,3,1,2)
     return img
 
 
