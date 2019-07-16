@@ -7,7 +7,7 @@ import pickle
 
 BATCH_SIZE = 32
 
-class AutoPilotCNN(): 
+class AutoPilotCNN(nn.Module): 
     def __init__(self):
         super(AutoPilotCNN, self).__init__()
         self.conv1= nn.Sequential(
@@ -58,22 +58,18 @@ def train(model, x_list, y_list):
         num_workers = 2
     )
     for step, (batch_x, batch_y) in enumerate(loader): 
+        out = model(batch_x)[0]
+        loss = loss_func(out.view_as(batch_y),batch_y)
         if(step%50==0):
-            out = model(batch_x)[0]
             test(out,batch_y)
-        else:
-            out = model(batch_x)[0]
-            loss = loss_func(out,batch_y)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            print("loss=",loss.item())
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
 
 def test(out, batch_y):
-    accuarcy = 0
-    for i in range(len(out)):
-        accuarcy += 1 if abs(out[i]-batch_y[i])<1 else 0
-        # out[i] is an 1D tensor => 1D tensor - 1D tenso is allowed? 
-    print(i/len(out))
+    out = out.view_as(batch_y)
+    print(out,'\n',batch_y)
 
 def loadFromPickle():
     with open("features_40", "rb") as f:
@@ -94,10 +90,13 @@ def main():
     features, labels = augmentData(features, labels)
     features = features.reshape(features.shape[0], 40, 40, 1)
 
-    features_tensor = torch.tensor(features, dtype=torch.float32)
+    features_tensor = torch.tensor(features, dtype=torch.float32).permute(0,3,1,2)
+#    features_tensor = features_tensor.cuda()
     labels_tensor = torch.tensor(labels, dtype=torch.float32)
+#    labels_tensor = labels_tensor.cuda()
 
     cnn = AutoPilotCNN()
+#    cnn.cuda()
 
     train(cnn, features_tensor, labels_tensor)
 

@@ -7,10 +7,9 @@ import pickle
 
 BATCH_SIZE = 32
 
-class AutoPilotCNN():
+class AutoPilotCNN(nn.Module):
     def __init__(self):
         super(AutoPilotCNN, self).__init__()
-        self.lambdaLayer = nn.Lamb
         self.conv1 = nn.Sequential(
              nn.Conv2d(1,32,3,1,1),
              nn.ReLU(),
@@ -60,7 +59,7 @@ class AutoPilotCNN():
         x = self.conv5(x)
         x = self.conv6(x)
         x = x.view(x.size()[0],-1)
-        out = self.fc(out)
+        out = self.fc(x)
         return out, x
     
     def train(self, x_list, y_list):
@@ -72,22 +71,18 @@ class AutoPilotCNN():
             num_workers = 2
         )
         for step, (batch_x, batch_y) in enumerate(loader):
+            out = self(batch_x)[0]
+            loss = self.loss_func(out.view_as(batch_y),batch_y)
             if(step%50==0):
-                out = self(batch_x)[0]
                 test(out,batch_y)
-            else:
-                out = self(batch_x)[0]
-                loss = self.loss_func(out,batch_y)
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
+                print('loss=',loss.item())
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
 
 def test(out, batch_y):
-    accuarcy = 0
-    for i in range(len(out)):
-        accuarcy += 1 if abs(out[i]-batch_y[i])<1 else 0
-        # out[i] is an 1D tensor => 1D tensor - 1D tenso is allowed? 
-    print(i/len(out))
+    out = out.view_as(batch_y)
+    print(out, '\n', batch_y)
 
 
 def loadFromPickle():
@@ -103,10 +98,13 @@ def main():
     features, labels = loadFromPickle()
     features = features.reshape(features.shape[0], 100, 100, 1)
     
-    features_tensor = torch.tensor(features, dtype=torch.float32)
+    features_tensor = torch.tensor(features, dtype=torch.float32).permute(0,3,1,2)
+#   features_tensor = features_tensor.cuda()
     labels_tensor = torch.tensor(labels, dtype=torch.float32)
+#    labels_tensor = labels_tensor.cuda()
 
     cnn = AutoPilotCNN()
+#    cnn = cnn.cuda()
 
     cnn.train(features_tensor,labels_tensor)
 
